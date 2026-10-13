@@ -1,5 +1,11 @@
 # Changelog
 
+## Python Icechunk Library [unreleased]
+
+### Features
+
+- `IcechunkStore.set_virtual_refs_arr` and `set_virtual_refs_arr_async` accept a `list[str]` for `checksum`, one ETag per chunk parallel to `locations`, so an array whose chunks come from many objects can be written in one call ([#1574](https://github.com/earth-mover/icechunk/issues/1574)).
+
 ## Python Icechunk Library 2.3.0
 
 ### Features

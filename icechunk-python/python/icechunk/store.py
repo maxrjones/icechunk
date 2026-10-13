@@ -428,7 +428,7 @@ class IcechunkStore(Store, SyncMixin):
         *,
         validate_containers: bool = True,
         arr_offset: tuple[int, ...] | None = None,
-        checksum: datetime | str | None = None,
+        checksum: datetime | str | list[str] | None = None,
     ) -> list[tuple[int, ...]] | None:
         """Store virtual references for an array from flat arrays of locations, offsets, and lengths.
 
@@ -466,9 +466,12 @@ class IcechunkStore(Store, SyncMixin):
             append operations where new chunks should be written at an
             offset from (0, 0, ...). Must have the same length as
             chunk_grid_shape. Default is None.
-        checksum : datetime | str | None
-            Optional checksum for all chunks. Can be a datetime
-            (last modified time) or a string (ETag). Default is None.
+        checksum : datetime | str | list[str] | None
+            Optional checksum. A datetime (last modified time) or a string
+            (ETag) applies to all chunks. A list of strings gives each chunk
+            its own ETag, parallel to ``locations``, so one call can cover
+            chunks from several objects. An empty string in the list means
+            that chunk has no checksum. Default is None.
 
         Returns
         -------
@@ -498,7 +501,7 @@ class IcechunkStore(Store, SyncMixin):
         *,
         validate_containers: bool = True,
         arr_offset: tuple[int, ...] | None = None,
-        checksum: datetime | str | None = None,
+        checksum: datetime | str | list[str] | None = None,
     ) -> list[tuple[int, ...]] | None:
         """Store virtual references for an array from flat arrays (async).
 
@@ -536,9 +539,12 @@ class IcechunkStore(Store, SyncMixin):
             append operations where new chunks should be written at an
             offset from (0, 0, ...). Must have the same length as
             chunk_grid_shape. Default is None.
-        checksum : datetime | str | None
-            Optional checksum for all chunks. Can be a datetime
-            (last modified time) or a string (ETag). Default is None.
+        checksum : datetime | str | list[str] | None
+            Optional checksum. A datetime (last modified time) or a string
+            (ETag) applies to all chunks. A list of strings gives each chunk
+            its own ETag, parallel to ``locations``, so one call can cover
+            chunks from several objects. An empty string in the list means
+            that chunk has no checksum. Default is None.
 
         Returns
         -------

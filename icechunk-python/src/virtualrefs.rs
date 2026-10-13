@@ -6,6 +6,7 @@ use icechunk::{
         ChunkIndices,
         manifest::{Checksum, VirtualChunkLocation, VirtualChunkRef},
     },
+    storage::ETag,
     store::SetVirtualRefsResult,
 };
 use itertools::Itertools as _;
@@ -15,20 +16,47 @@ use pyo3::{
     types::{PyList, PyTuple},
 };
 
-use crate::errors::PyIcechunkStoreError;
+use crate::{errors::PyIcechunkStoreError, store::ChecksumArgument};
+
+/// `checksum` for the `set_virtual_refs_arr` methods: one value shared by
+/// every chunk, or a `list[str]` of per-chunk ETags parallel to `locations`.
+#[derive(FromPyObject, Clone, Debug)]
+pub(crate) enum ArrChecksumArgument {
+    #[pyo3(transparent, annotation = "datetime.datetime | str")]
+    Shared(ChecksumArgument),
+    #[pyo3(transparent, annotation = "list[str]")]
+    PerChunk(Vec<String>),
+}
 
 /// Build `Vec<(ChunkIndices, VirtualChunkRef)>` from columnar Python data.
 ///
 /// Must be called while holding the GIL (borrows `&str` from the Python list).
+///
+/// A per-chunk `checksum` list is parallel to `locations`: a non-empty entry
+/// becomes that chunk's `ETag` checksum and an empty entry means no checksum.
 pub(crate) fn build_vrefs_from_arrays(
     locations: &Bound<'_, PyList>,
     offsets: &[u64],
     lengths: &[u64],
     chunk_grid_shape: &[u32],
     arr_offset: Option<&[u32]>,
-    checksum: Option<Checksum>,
+    checksum: Option<ArrChecksumArgument>,
 ) -> PyResult<Vec<(ChunkIndices, VirtualChunkRef)>> {
     let n = locations.len();
+
+    let (shared, per_chunk): (Option<Checksum>, Option<Vec<String>>) = match checksum {
+        Some(ArrChecksumArgument::PerChunk(etags)) => {
+            if etags.len() != n {
+                return Err(PyValueError::new_err(format!(
+                    "checksum list length ({}) != locations length ({n})",
+                    etags.len()
+                )));
+            }
+            (None, Some(etags))
+        }
+        Some(ArrChecksumArgument::Shared(c)) => (Some(c.into()), None),
+        None => (None, None),
+    };
 
     if offsets.len() != n || lengths.len() != n {
         return Err(PyValueError::new_err(
@@ -68,11 +96,16 @@ pub(crate) fn build_vrefs_from_arrays(
             let location = VirtualChunkLocation::from_url(loc_str)
                 .map_err(PyIcechunkStoreError::from)?;
             let indices = flat_to_nd_indices(i, chunk_grid_shape, arr_offset);
+            let checksum = match &per_chunk {
+                Some(etags) if etags[i].is_empty() => None,
+                Some(etags) => Some(Checksum::ETag(ETag(etags[i].clone()))),
+                None => shared.clone(),
+            };
             let vref = VirtualChunkRef {
                 location,
                 offset: offsets[i],
                 length: lengths[i],
-                checksum: checksum.clone(),
+                checksum,
             };
             Ok(Some((indices, vref)))
         })

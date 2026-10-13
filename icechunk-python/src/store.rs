@@ -35,7 +35,10 @@ use crate::{
     impl_pickle,
     session::{ChunkType, PySession},
     streams::PyAsyncCloseableIterator,
-    virtualrefs::{build_vrefs_from_arrays, do_set_virtual_refs, vrefs_result_to_py},
+    virtualrefs::{
+        ArrChecksumArgument, build_vrefs_from_arrays, do_set_virtual_refs,
+        vrefs_result_to_py,
+    },
 };
 
 type KeyRanges = Vec<(String, (Option<ChunkOffset>, Option<ChunkOffset>))>;
@@ -52,7 +55,7 @@ pub(crate) fn parse_array_path(path: String) -> PyResult<Path> {
 }
 
 #[derive(FromPyObject, Clone, Debug)]
-enum ChecksumArgument {
+pub(crate) enum ChecksumArgument {
     #[pyo3(transparent, annotation = "str")]
     String(String),
     #[pyo3(transparent, annotation = "datetime.datetime")]
@@ -538,7 +541,7 @@ impl PyStore {
         lengths: PyReadonlyArray1<'_, u64>,
         validate_containers: bool,
         arr_offset: Option<Vec<u32>>,
-        checksum: Option<ChecksumArgument>,
+        checksum: Option<ArrChecksumArgument>,
     ) -> PyResult<Option<Vec<Py<PyTuple>>>> {
         let vrefs = build_vrefs_from_arrays(
             locations,
@@ -550,7 +553,7 @@ impl PyStore {
             })?,
             &chunk_grid_shape,
             arr_offset.as_deref(),
-            checksum.map(|c| c.into()),
+            checksum,
         )?;
 
         let store = Arc::clone(&self.0);
@@ -580,7 +583,7 @@ impl PyStore {
         lengths: PyReadonlyArray1<'_, u64>,
         validate_containers: bool,
         arr_offset: Option<Vec<u32>>,
-        checksum: Option<ChecksumArgument>,
+        checksum: Option<ArrChecksumArgument>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let vrefs = build_vrefs_from_arrays(
             locations,
@@ -592,7 +595,7 @@ impl PyStore {
             })?,
             &chunk_grid_shape,
             arr_offset.as_deref(),
-            checksum.map(|c| c.into()),
+            checksum,
         )?;
 
         let store = Arc::clone(&self.0);
