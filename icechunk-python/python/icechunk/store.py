@@ -429,6 +429,7 @@ class IcechunkStore(Store, SyncMixin):
         validate_containers: bool = True,
         arr_offset: tuple[int, ...] | None = None,
         checksum: datetime | str | None = None,
+        etag_checksums: list[str] | None = None,
     ) -> list[tuple[int, ...]] | None:
         """Store virtual references for an array from flat arrays of locations, offsets, and lengths.
 
@@ -469,6 +470,13 @@ class IcechunkStore(Store, SyncMixin):
         checksum : datetime | str | None
             Optional checksum for all chunks. Can be a datetime
             (last modified time) or a string (ETag). Default is None.
+        etag_checksums : list[str] | None
+            Optional per-chunk ETag checksums, parallel to ``locations``.
+            A non-empty string is stored as that chunk's ETag checksum and
+            enforced at read time (``If-Match``); an empty string means the
+            chunk uses ``checksum`` instead. Use this when the chunks of one
+            array come from several objects, each with its own ETag, so the
+            whole array can be written in one call. Default is None.
 
         Returns
         -------
@@ -486,6 +494,7 @@ class IcechunkStore(Store, SyncMixin):
             validate_containers=validate_containers,
             arr_offset=list(arr_offset) if arr_offset is not None else None,
             checksum=checksum,
+            etag_checksums=etag_checksums,
         )
 
     async def set_virtual_refs_arr_async(
@@ -499,6 +508,7 @@ class IcechunkStore(Store, SyncMixin):
         validate_containers: bool = True,
         arr_offset: tuple[int, ...] | None = None,
         checksum: datetime | str | None = None,
+        etag_checksums: list[str] | None = None,
     ) -> list[tuple[int, ...]] | None:
         """Store virtual references for an array from flat arrays (async).
 
@@ -539,6 +549,13 @@ class IcechunkStore(Store, SyncMixin):
         checksum : datetime | str | None
             Optional checksum for all chunks. Can be a datetime
             (last modified time) or a string (ETag). Default is None.
+        etag_checksums : list[str] | None
+            Optional per-chunk ETag checksums, parallel to ``locations``.
+            A non-empty string is stored as that chunk's ETag checksum and
+            enforced at read time (``If-Match``); an empty string means the
+            chunk uses ``checksum`` instead. Use this when the chunks of one
+            array come from several objects, each with its own ETag, so the
+            whole array can be written in one call. Default is None.
 
         Returns
         -------
@@ -556,6 +573,7 @@ class IcechunkStore(Store, SyncMixin):
             validate_containers=validate_containers,
             arr_offset=list(arr_offset) if arr_offset is not None else None,
             checksum=checksum,
+            etag_checksums=etag_checksums,
         )
 
     async def delete(self, key: str) -> None:

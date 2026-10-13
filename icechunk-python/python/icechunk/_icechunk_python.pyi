@@ -2828,6 +2828,7 @@ class PyStore:
         validate_containers: bool = True,
         arr_offset: list[int] | None = None,
         checksum: datetime.datetime | str | None = None,
+        etag_checksums: list[str] | None = None,
     ) -> list[tuple[int, ...]] | None: ...
     async def set_virtual_refs_arr_async(
         self,
@@ -2840,6 +2841,7 @@ class PyStore:
         validate_containers: bool = True,
         arr_offset: list[int] | None = None,
         checksum: datetime.datetime | str | None = None,
+        etag_checksums: list[str] | None = None,
     ) -> list[tuple[int, ...]] | None: ...
     async def delete(self, key: str) -> None: ...
     async def delete_dir(self, prefix: str) -> None: ...

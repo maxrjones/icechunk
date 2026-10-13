@@ -6,6 +6,7 @@ use icechunk::{
         ChunkIndices,
         manifest::{Checksum, VirtualChunkLocation, VirtualChunkRef},
     },
+    storage::ETag,
     store::SetVirtualRefsResult,
 };
 use itertools::Itertools as _;
@@ -20,6 +21,9 @@ use crate::errors::PyIcechunkStoreError;
 /// Build `Vec<(ChunkIndices, VirtualChunkRef)>` from columnar Python data.
 ///
 /// Must be called while holding the GIL (borrows `&str` from the Python list).
+///
+/// `etag_checksums`, when given, is parallel to `locations`: a non-empty entry
+/// becomes that chunk's `ETag` checksum and an empty entry falls back to `checksum`.
 pub(crate) fn build_vrefs_from_arrays(
     locations: &Bound<'_, PyList>,
     offsets: &[u64],
@@ -27,6 +31,7 @@ pub(crate) fn build_vrefs_from_arrays(
     chunk_grid_shape: &[u32],
     arr_offset: Option<&[u32]>,
     checksum: Option<Checksum>,
+    etag_checksums: Option<&Bound<'_, PyList>>,
 ) -> PyResult<Vec<(ChunkIndices, VirtualChunkRef)>> {
     let n = locations.len();
 
@@ -34,6 +39,15 @@ pub(crate) fn build_vrefs_from_arrays(
         return Err(PyValueError::new_err(
             "locations, offsets, and lengths must have the same length",
         ));
+    }
+
+    if let Some(etags) = etag_checksums
+        && etags.len() != n
+    {
+        return Err(PyValueError::new_err(format!(
+            "etag_checksums length ({}) != locations length ({n})",
+            etags.len()
+        )));
     }
 
     let expected: usize = chunk_grid_shape.iter().map(|&x| x as usize).product();
@@ -68,11 +82,23 @@ pub(crate) fn build_vrefs_from_arrays(
             let location = VirtualChunkLocation::from_url(loc_str)
                 .map_err(PyIcechunkStoreError::from)?;
             let indices = flat_to_nd_indices(i, chunk_grid_shape, arr_offset);
+            let checksum = match etag_checksums {
+                Some(etags) => {
+                    let etag_item = etags.get_item(i)?;
+                    let etag: &str = etag_item.extract()?;
+                    if etag.is_empty() {
+                        checksum.clone()
+                    } else {
+                        Some(Checksum::ETag(ETag(etag.to_string())))
+                    }
+                }
+                None => checksum.clone(),
+            };
             let vref = VirtualChunkRef {
                 location,
                 offset: offsets[i],
                 length: lengths[i],
-                checksum: checksum.clone(),
+                checksum,
             };
             Ok(Some((indices, vref)))
         })

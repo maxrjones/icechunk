@@ -527,7 +527,7 @@ impl PyStore {
     /// More efficient than `set_virtual_refs` as it avoids creating per-chunk
     /// Python `VirtualChunkSpec` objects.
     #[expect(clippy::too_many_arguments)]
-    #[pyo3(signature = (array_path, chunk_grid_shape, locations, offsets, lengths, *, validate_containers = true, arr_offset = None, checksum = None))]
+    #[pyo3(signature = (array_path, chunk_grid_shape, locations, offsets, lengths, *, validate_containers = true, arr_offset = None, checksum = None, etag_checksums = None))]
     fn set_virtual_refs_arr(
         &self,
         py: Python<'_>,
@@ -539,6 +539,7 @@ impl PyStore {
         validate_containers: bool,
         arr_offset: Option<Vec<u32>>,
         checksum: Option<ChecksumArgument>,
+        etag_checksums: Option<&Bound<'_, PyList>>,
     ) -> PyResult<Option<Vec<Py<PyTuple>>>> {
         let vrefs = build_vrefs_from_arrays(
             locations,
@@ -551,6 +552,7 @@ impl PyStore {
             &chunk_grid_shape,
             arr_offset.as_deref(),
             checksum.map(|c| c.into()),
+            etag_checksums,
         )?;
 
         let store = Arc::clone(&self.0);
@@ -569,7 +571,7 @@ impl PyStore {
     /// `asyncio.gather()` to overlap vref building for one array with store
     /// insertion for another.
     #[expect(clippy::too_many_arguments)]
-    #[pyo3(signature = (array_path, chunk_grid_shape, locations, offsets, lengths, *, validate_containers = true, arr_offset = None, checksum = None))]
+    #[pyo3(signature = (array_path, chunk_grid_shape, locations, offsets, lengths, *, validate_containers = true, arr_offset = None, checksum = None, etag_checksums = None))]
     fn set_virtual_refs_arr_async<'py>(
         &'py self,
         py: Python<'py>,
@@ -581,6 +583,7 @@ impl PyStore {
         validate_containers: bool,
         arr_offset: Option<Vec<u32>>,
         checksum: Option<ChecksumArgument>,
+        etag_checksums: Option<&Bound<'_, PyList>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let vrefs = build_vrefs_from_arrays(
             locations,
@@ -593,6 +596,7 @@ impl PyStore {
             &chunk_grid_shape,
             arr_offset.as_deref(),
             checksum.map(|c| c.into()),
+            etag_checksums,
         )?;
 
         let store = Arc::clone(&self.0);

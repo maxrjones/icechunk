@@ -585,6 +585,98 @@ def test_set_virtual_refs_arr_skips_empty_paths() -> None:
     assert sorted(locations) == ["s3://bucket/a.nc", "s3://bucket/c.nc"]
 
 
+@pytest.mark.filterwarnings("ignore:datetime.datetime.utcnow")
+@pytest.mark.parametrize("use_async", [True, False])
+async def test_set_virtual_refs_arr_per_chunk_etag_checksums(
+    use_async: bool, any_spec_version: int | None
+) -> None:
+    """``etag_checksums`` gives each chunk its own ETag; empty entries fall back
+    to ``checksum``, so one call can cover chunks from many objects."""
+    prefix = str(uuid.uuid4())
+    etags = write_chunks_to_minio(
+        [
+            (f"{prefix}/a", b"aaaa"),
+            (f"{prefix}/b", b"bbbb"),
+            (f"{prefix}/c", b"cccc"),
+        ],
+    )
+    locations = [f"s3://testbucket/{prefix}/{name}" for name in "abc"]
+
+    config = RepositoryConfig.default()
+    store_config = s3_store(
+        region="us-east-1",
+        endpoint_url="http://localhost:4200",
+        allow_http=True,
+        s3_compatible=True,
+        force_path_style=True,
+    )
+    config.set_virtual_chunk_container(
+        VirtualChunkContainer("s3://testbucket/", store_config)
+    )
+    access_key_id, secret_access_key = Permission.MODIFY.keys()
+    credentials = containers_credentials(
+        {
+            "s3://testbucket": s3_credentials(
+                access_key_id=access_key_id, secret_access_key=secret_access_key
+            )
+        }
+    )
+    repo = Repository.create(
+        storage=in_memory_storage(),
+        config=config,
+        authorize_virtual_chunk_access=credentials,
+        spec_version=any_spec_version,
+    )
+    session = repo.writable_session("main")
+    store = session.store
+    zarr.create_array(store, shape=(12,), chunks=(4,), dtype="u1", compressors=None)
+
+    offsets = np.zeros(3, dtype=np.uint64)
+    lengths = np.full(3, 4, dtype=np.uint64)
+
+    async def set_refs(etag_checksums: list[str], checksum: str | None = None) -> None:
+        if use_async:
+            await store.set_virtual_refs_arr_async(
+                array_path="/",
+                chunk_grid_shape=(3,),
+                locations=locations,
+                offsets=offsets,
+                lengths=lengths,
+                checksum=checksum,
+                etag_checksums=etag_checksums,
+            )
+        else:
+            store.set_virtual_refs_arr(
+                array_path="/",
+                chunk_grid_shape=(3,),
+                locations=locations,
+                offsets=offsets,
+                lengths=lengths,
+                checksum=checksum,
+                etag_checksums=etag_checksums,
+            )
+
+    with pytest.raises(ValueError, match="etag_checksums length"):
+        await set_refs(etag_checksums=["", ""])
+
+    # a: its real ETag; b: a stale per-chunk ETag; c: falls back to no checksum.
+    await set_refs(etag_checksums=[etags[0], "00000000000000000000000000000000", ""])
+    array = zarr.open_array(store, path="/")
+    np.testing.assert_array_equal(array[0:4], np.frombuffer(b"aaaa", dtype="u1"))
+    with pytest.raises(IcechunkError, match="chunk has changed"):
+        array[4:8]
+    np.testing.assert_array_equal(array[8:12], np.frombuffer(b"cccc", dtype="u1"))
+
+    # Every entry empty: all three fall back to the stale per-call ETag.
+    await set_refs(
+        checksum="00000000000000000000000000000000", etag_checksums=["", "", ""]
+    )
+    array = zarr.open_array(store, path="/")
+    for i in range(3):
+        with pytest.raises(IcechunkError, match="chunk has changed"):
+            array[4 * i : 4 * i + 4]
+
+
 def test_set_virtual_refs_preserves_url_parts() -> None:
     """Regression test for https://github.com/earth-mover/icechunk/issues/2218
 
